@@ -1,11 +1,13 @@
 import json
 import requests
+import os
 from pprint import pprint
 import urllib.request
 from shutil import copyfile
 import urllib3
+import subprocess
 
-api_base_url = 'http://127.0.0.1:1337'
+api_base_url = 'https://voxelise-api.mattbuckley.org'
 http = urllib3.PoolManager()
 
 def download_mesh(url, filename):
@@ -14,7 +16,11 @@ def download_mesh(url, filename):
 
 def process_mesh(mesh_filename, volume_filename):
     #voxelise
-    copyfile(mesh_filename, 'volumes/' + volume_filename)
+    #pwd = os.getcwd()
+    #command = "docker run -it --rm -v " + pwd + "/downloads:/downloads pymesh/pymesh voxelize.py /" + mesh_filename + " /" + volume_filename + " --cell-size 1"
+    command = f"./voxelise {mesh_filename} {volume_filename} 100"
+    print(command)
+    subprocess.run(command.split(' ')) #Takes array of strings as argv
 
 #Returns ID
 def create_volume():
@@ -32,7 +38,7 @@ def set_mesh_processed(mesh_id):
 def upload_volume(filename):
     volume_id = create_volume()
     
-    files = { 'files': (filename, open('volumes/' + filename, 'rb'), 'application/octet-stream') }
+    files = { 'files': (filename, open(filename, 'rb'), 'application/octet-stream') }
     options = {
         'refId': volume_id, # volume Id.
         'ref': "volume", # Model name.
@@ -50,7 +56,7 @@ for mesh in meshes:
     mesh_file = mesh['file']
     if (mesh_file):
         mesh_filename = 'downloads/' + mesh_file['name']
-        volume_filename = mesh_file['name'] + '.raw'
+        volume_filename = 'downloads/processed/' + mesh_file['name'] + '_100x100x100_uint8.raw'
         download_mesh(api_base_url + mesh_file['url'], mesh_filename)
         process_mesh(mesh_filename, volume_filename)
         volume_id = upload_volume(volume_filename)
