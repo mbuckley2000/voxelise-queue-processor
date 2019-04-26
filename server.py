@@ -8,7 +8,6 @@ from shutil import copyfile
 import pathlib
 import subprocess
 from time import sleep
-import re
 
 #Our modules
 import voxelise
@@ -20,8 +19,6 @@ processed_dir = 'downloads/processed'
 dimension = 100 #OUTPUT VOLUME DIM (3D)
 upload_max_attempts = 3
 link_max_attempts = 5 #Linking uploaded volume to mesh
-url_regex = re.compile(r'[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&\/=]*)')
-
 
 #Creates directories if they don't exist
 #Arg: list of strings (directory names)
