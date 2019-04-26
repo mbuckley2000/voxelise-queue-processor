@@ -1,0 +1,1 @@
+pm2 start server.py --interpreter=python3
