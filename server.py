@@ -7,18 +7,19 @@ import sys
 import pathlib
 from time import sleep
 
-#Our modules
+# Our modules
 import voxelise
 import voxelise_api
 
-#CONFIG
+# CONFIG
 MESH_DIR = 'downloads'
 VOLUME_DIR = 'downloads/processed'
-VOXELISATION_DIMENSION = 100 #OUTPUT VOLUME DIM (3D)
+VOXELISATION_DIMENSION = 100  # OUTPUT VOLUME DIM (3D)
 MAX_UPLOAD_ATTEMPTS = 3
-MAX_LINKING_ATTEMPTS = 5 #Linking uploaded volume to mesh
+MAX_LINKING_ATTEMPTS = 5  # Linking uploaded volume to mesh
 RETRY_TIME = 1
 SLEEP_INTERVAL = 1
+
 
 def check_and_create_directories(directories):
     """
@@ -34,10 +35,11 @@ def check_and_create_directories(directories):
     try:
         for directory in directories:
             if not isinstance(directory, str):
-                print("Invalid argument provided to check_and_create_directories. Must be list of strings.", file=sys.stderr)
+                print(
+                    "Invalid argument provided to check_and_create_directories. Must be list of strings.", file=sys.stderr)
                 exit(1)
             if not os.path.isdir(directory):
-                #Create directory
+                # Create directory
                 print(f"Creating directory: {directory}")
                 os.makedirs(directory)
 
@@ -62,7 +64,7 @@ def validate_mesh(mesh):
     mesh_file_url = mesh_file['url']
     mesh_id = mesh['id']
 
-    #Validate strings
+    # Validate strings
     strings = [mesh_file, mesh_file_name, mesh_file_url, mesh_id]
     for string in strings:
         if not string:
@@ -82,9 +84,9 @@ def get_volume_filename(mesh_filename):
     Returns:
         Volume filename
     """
-    #Work out the volume file name
+    # Work out the volume file name
     ext_length = len(pathlib.Path(mesh_filename).suffix)
-    prefix = mesh_filename[:-ext_length] #Remove extension
+    prefix = mesh_filename[:-ext_length]  # Remove extension
     return f'{prefix}_{VOXELISATION_DIMENSION}x{VOXELISATION_DIMENSION}x{VOXELISATION_DIMENSION}_uint8.raw'
 
 
@@ -98,12 +100,12 @@ def upload_volume_to_api(volume_file_path):
     Returns:
         Uploaded volume ID
     """
-    #Upload volume to API
+    # Upload volume to API
     for attempt in range(MAX_UPLOAD_ATTEMPTS):
         volume_id = voxelise_api.upload_volume(volume_file_path)
         if volume_id:
             break
-        #Wait RETRY_TIME for each retry before retrying
+        # Wait RETRY_TIME for each retry before retrying
         sleep(RETRY_TIME * attempt)
 
     return volume_id
@@ -121,11 +123,11 @@ def link_volume_to_mesh(mesh_id, volume_id):
         Success: True
         Failure: False
     """
-    #Link uploaded volume to mesh and set it to processed
+    # Link uploaded volume to mesh and set it to processed
     for attempt in range(MAX_LINKING_ATTEMPTS):
         if voxelise_api.link_mesh_volume(mesh_id, volume_id) and voxelise_api.set_mesh_processed(mesh_id):
             return True
-        #Wait RETRY_TIME for each retry before retrying
+        # Wait RETRY_TIME for each retry before retrying
         sleep(RETRY_TIME * attempt)
 
     return False
@@ -150,49 +152,51 @@ def process_meshes(meshes):
         mesh_file_url = mesh_file['url']
 
         volume_filename = get_volume_filename(mesh_filename)
-        
-        #Work out file paths
+
+        # Work out file paths
         mesh_file_path = f'{MESH_DIR}/{mesh_filename}'
         volume_file_path = f'{VOLUME_DIR}/{volume_filename}'
 
-        #Download file
+        # Download file
         if not voxelise_api.download_file(mesh_file_url, mesh_file_path):
             print(f"Failed to download mesh file: {mesh_id}")
             continue
 
-        #Voxelise
+        # Voxelise
         if not voxelise.process_mesh(mesh_file_path, volume_file_path, VOXELISATION_DIMENSION):
             print(f"Failed to voxelise mesh: {mesh_id}")
             continue
-        
-        #Upload volume to API
+
+        # Upload volume to API
         volume_id = upload_volume_to_api(volume_file_path)
         if not volume_id:
             print(f"Failed to upload volume: {mesh_id}")
             continue
-        
-        #Link uploaded volume to mesh and set it to processed
+
+        # Link uploaded volume to mesh and set it to processed
         if not link_volume_to_mesh(mesh_id, volume_id):
             print(f"Failed to link volume to mesh: {mesh_id}")
             continue
 
+        print(f"Successfully processed mesh {mesh_id}")
 
-#Main program start
+
+# Main program start
 def server():
     """
     Continuously checks Voxelise API for unprocessed meshes.
     Downloads, voxelises, and reuploads them to the API.
     """
     while True:
-        #Sleep a bit to avoid over pinging the server
+        # Sleep a bit to avoid over pinging the server
         sleep(SLEEP_INTERVAL)
 
-        #Verify directories
+        # Verify directories
         if not check_and_create_directories([MESH_DIR, VOLUME_DIR]):
             print("Unable to check / create directories", file=sys.stderr)
             continue
 
-        #Get unprocessed meshes from API
+        # Get unprocessed meshes from API
         meshes = voxelise_api.get_meshes()
 
         if 'failed' in meshes:
@@ -206,4 +210,4 @@ def server():
         process_meshes(meshes)
 
 
-server() #RUN SERVER
+server()  # RUN SERVER

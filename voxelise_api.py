@@ -6,7 +6,7 @@ import sys
 import urllib
 import requests
 
-#CONFIG
+# CONFIG
 API_BASE_URL = 'https://voxelise-api.mattbuckley.org'
 
 
@@ -76,8 +76,10 @@ def link_mesh_volume(mesh_id, volume_id):
         ON FAILURE: False
     """
     try:
-        requests.put(API_BASE_URL+'/volumes/' + volume_id, data={'mesh': mesh_id})
-        requests.put(API_BASE_URL+'/meshes/' + mesh_id, data={'volume': volume_id})
+        requests.put(API_BASE_URL+'/volumes/' +
+                     volume_id, data={'mesh': mesh_id})
+        requests.put(API_BASE_URL+'/meshes/' + mesh_id,
+                     data={'volume': volume_id})
         return True
     except Exception as ex:
         print('Failed to create volume', file=sys.stderr)
@@ -123,17 +125,20 @@ def upload_volume(filename):
         return False
 
     try:
-        files = {'files': (filename, open(filename, 'rb'), 'application/octet-stream')}
+        files = {'files': (filename, open(filename, 'rb'),
+                           'application/octet-stream')}
         options = {
-            'refId': volume_id, # volume Id.
-            'ref': "volume", # Model name.
-            'field': "file" #Field name in the User model.
+            'refId': volume_id,  # volume Id.
+            'ref': "volume",  # Model name.
+            'field': "file"  # Field name in the User model.
         }
-        response = requests.post(API_BASE_URL+'/upload', files=files, data=options)
+        response = requests.post(
+            API_BASE_URL+'/upload', files=files, data=options)
         code = response.status_code
 
         if code != 200:
-            print(f'Failed to upload volume, status code {code}', file=sys.stderr)
+            print(
+                f'Failed to upload volume, status code {code}', file=sys.stderr)
 
         return volume_id
 
