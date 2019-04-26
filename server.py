@@ -1,3 +1,7 @@
+"""
+Continuously checks Voxelise API for unprocessed meshes.
+Downloads, voxelises, and reuploads them to the API.
+"""
 import os
 import sys
 import pathlib
@@ -14,20 +18,44 @@ VOXELISATION_DIMENSION = 100 #OUTPUT VOLUME DIM (3D)
 MAX_UPLOAD_ATTEMPTS = 3
 MAX_LINKING_ATTEMPTS = 5 #Linking uploaded volume to mesh
 
-#Creates directories if they don't exist
-#Arg: list of strings (directory names)
+
 def check_and_create_directories(directories):
-    for directory in directories:
-        if not isinstance(directory, str):
-            print("Invalid argument provided to check_and_create_directories. Must be list of strings.", file=sys.stderr)
-            exit(1)
-        if not os.path.isdir(directory):
-            #Create directory
-            print(f"Creating directory: {directory}")
-            os.makedirs(directory)
+    """
+    Checks if the supplied directories exist, and creates them recursively if not
+
+    Args:
+        directories: List of strings, directories to create
+
+    Returns:
+        SUCCESS: True
+        FAILURE: False
+    """
+    try:
+        for directory in directories:
+            if not isinstance(directory, str):
+                print("Invalid argument provided to check_and_create_directories. Must be list of strings.", file=sys.stderr)
+                exit(1)
+            if not os.path.isdir(directory):
+                #Create directory
+                print(f"Creating directory: {directory}")
+                os.makedirs(directory)
+
+        return True
+    except Exception as ex:
+        print(ex, file=sys.stderr)
+        return False
 
 
 def validate_mesh(mesh):
+    """
+    Validates the structure of the given mesh, because it was retreived from the API
+
+    Args:
+        mesh: Mesh to check
+    Returns:
+        VALID: True
+        INVALID: False
+    """
     mesh_file = mesh['file']
     mesh_file_name = mesh_file['name']
     mesh_file_url = mesh_file['url']
@@ -45,6 +73,10 @@ def validate_mesh(mesh):
 
 #Main program start
 def server():
+    """
+    Continuously checks Voxelise API for unprocessed meshes.
+    Downloads, voxelises, and reuploads them to the API.
+    """
     while True:
         #Sleep a bit to avoid over pinging the server
         sleep(1)

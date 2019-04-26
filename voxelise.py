@@ -1,11 +1,28 @@
-import sys, os, subprocess, pathlib, multiprocessing
+"""
+Handles interaction with the C++ mesh voxeliser code
+"""
+import sys
+import os
+import subprocess
+import pathlib
+import multiprocessing
 
 #CONFIG
 VALIDATE_MESH_FILE_EXTENSION = ['.obj']
 VALIDATE_VOLUME_FILE_EXTENSION = ['.raw']
 NUM_THREADS = multiprocessing.cpu_count() #Can be set manually
 
+
 def validate_args(mesh_filename, volume_filename, dimension):
+    """
+    Validates the arguments supplied to the process_mesh function
+
+    Args:
+        Same as process_mesh
+
+    Returns:
+        True for valid args, False otherwise
+    """
     #Validate args
     #Dimension is int
     if not isinstance(dimension, int):
@@ -35,8 +52,19 @@ def validate_args(mesh_filename, volume_filename, dimension):
 
     return True
 
-#Voxelise mesh using our c++ program
+
 def process_mesh(mesh_filename, volume_filename, dimension):
+    """
+    Runs the C++ mesh voxelisation program
+
+    Args:
+        mesh_filename: STRING Mesh file to voxelise
+        volume_filename: STRING Volume file to output to
+        dimension: INT 3D dimension size of the volume
+
+    Returns:
+        True for valid args, False otherwise
+    """
     #Validate args
     if not validate_args(mesh_filename, volume_filename, dimension):
         print(f"Arguments failed validation in process_mesh", file=sys.stderr)
@@ -48,7 +76,7 @@ def process_mesh(mesh_filename, volume_filename, dimension):
         return True
 
     command = f"./voxelise {mesh_filename} {volume_filename} {dimension} {NUM_THREADS}"
-    
+
     try:
         subprocess.run(command.split(' '))
         return True
