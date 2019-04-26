@@ -1,65 +1,129 @@
 import json
 import requests
 import os
+import sys
 from pprint import pprint
-import urllib.request
+import urllib
 from shutil import copyfile
-import urllib3
+import pathlib
 import subprocess
+from time import sleep
+import re
 
-api_base_url = 'https://voxelise-api.mattbuckley.org'
-http = urllib3.PoolManager()
+#Our modules
+import voxelise
+import voxelise_api
 
-def download_mesh(url, filename):
-    # Download the file from `url` and save it locally under `file_name`:
-    urllib.request.urlretrieve(url, filename)
+#CONFIG
+mesh_dir = 'downloads'
+processed_dir = 'downloads/processed'
+dimension = 100 #OUTPUT VOLUME DIM (3D)
+upload_max_attempts = 3
+link_max_attempts = 5 #Linking uploaded volume to mesh
+url_regex = re.compile(r'[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&\/=]*)')
 
-def process_mesh(mesh_filename, volume_filename):
-    #voxelise
-    #pwd = os.getcwd()
-    #command = "docker run -it --rm -v " + pwd + "/downloads:/downloads pymesh/pymesh voxelize.py /" + mesh_filename + " /" + volume_filename + " --cell-size 1"
-    command = f"./voxelise {mesh_filename} {volume_filename} 100"
-    print(command)
-    subprocess.run(command.split(' ')) #Takes array of strings as argv
 
-#Returns ID
-def create_volume():
-    r = requests.post(api_base_url+'/volumes')
-    return r.json()['id']
+#Creates directories if they don't exist
+#Arg: list of strings (directory names)
+def check_and_create_directories(directories):
+    for directory in directories:
+        if not isinstance(directory, str):
+            print >> sys.stderr, "Invalid argument provided to check_and_create_directories. Must be list of strings."
+            exit(1)
+        if not os.path.isdir(directory):
+            #Create directory
+            print(f"Creating directory: {directory}")
+            os.makedirs(directory)
 
-def link_mesh_volume(mesh_id, volume_id):
-    requests.put(api_base_url+'/volumes/' + volume_id, data={ 'mesh': mesh_id })
-    requests.put(api_base_url+'/meshes/' + mesh_id, data={ 'volume': volume_id })
 
-def set_mesh_processed(mesh_id):
-    options = { 'processed': 'true' }
-    requests.put(api_base_url+'/meshes/' + mesh_id, data=options)
-
-def upload_volume(filename):
-    volume_id = create_volume()
-    
-    files = { 'files': (filename, open(filename, 'rb'), 'application/octet-stream') }
-    options = {
-        'refId': volume_id, # volume Id.
-        'ref': "volume", # Model name.
-        'field': "file" #// Field name in the User model.
-    }
-    r = requests.post(api_base_url+'/upload', files=files, data=options)
-    print(r.json())
-
-    return volume_id
-
-r = requests.get(api_base_url+'/meshes?processed=false')
-meshes = r.json()
-
-for mesh in meshes:
+def validate_mesh(mesh):
     mesh_file = mesh['file']
-    if (mesh_file):
-        mesh_filename = 'downloads/' + mesh_file['name']
-        volume_filename = 'downloads/processed/' + mesh_file['name'] + '_100x100x100_uint8.raw'
-        download_mesh(api_base_url + mesh_file['url'], mesh_filename)
-        process_mesh(mesh_filename, volume_filename)
-        volume_id = upload_volume(volume_filename)
-        mesh_id = mesh['id']
-        set_mesh_processed(mesh['id'])
-        link_mesh_volume(mesh['id'], volume_id)
+    mesh_file_name = mesh_file['name']
+    mesh_file_url = mesh_file['url']
+    mesh_id = mesh['id']
+
+    #Validate strings
+    strings = [mesh_file, mesh_file_name, mesh_file_url, mesh_id]
+    for string in strings:
+        if not string:
+            print(f"Mesh had no {string} property: {mesh_id}")
+            return False
+        if not len(string) > 0:
+            print(f"Mesh {string} property is zero length: {mesh_id}")
+            return False
+
+    return True
+
+
+#Main program start
+def server():
+    while True:
+        #Sleep a bit to avoid over pinging the server
+        sleep(1)
+
+        #Verify directories
+        check_and_create_directories([mesh_dir, processed_dir])
+
+        #Get unprocessed meshes from API
+        meshes = voxelise_api.get_meshes()
+        if 'failed' in meshes:
+            print("Failed to retreive meshes")
+            continue
+
+        if len(meshes) == 0:
+            #print("There are no unprocessed meshes")
+            continue
+
+        for mesh in meshes:
+            mesh_id = mesh['_id']
+
+            if not mesh_id or not validate_mesh(mesh):
+                print(f"Mesh failed validation: {mesh_id}")
+                continue
+
+            mesh_file = mesh['file']
+            mesh_file_name = mesh_file['name']
+            mesh_file_url = mesh_file['url']
+
+            #Work out the volume file name
+            ext_length = len(pathlib.Path(mesh_file_name).suffix)
+            prefix = mesh_file_name[:-ext_length] #Remove extension
+            volume_file_name = f'{prefix}_{dimension}x{dimension}x{dimension}_uint8.raw'
+            
+            #Work out file paths
+            mesh_file_path = f'{mesh_dir}/{mesh_file_name}'
+            volume_file_path = f'{processed_dir}/{volume_file_name}'
+
+            #Download file
+            if not voxelise_api.download_file(mesh_file_url, mesh_file_path):
+                print(f"Failed to download mesh file: {mesh_id}")
+                continue
+
+            #Voxelise
+            if not voxelise.process_mesh(mesh_file_path, volume_file_path, dimension):
+                print(f"Failed to voxelise mesh: {mesh_id}")
+                continue
+
+            #Upload volume to API
+            for attempt in range(upload_max_attempts):
+                volume_id = voxelise_api.upload_volume(volume_file_path)
+                if volume_id:
+                    break
+                #Wait one second for each retry before retrying
+                sleep(1 * attempt)
+            
+            #Failed to upload even after retries
+            if not volume_id:
+                print(f"Failed to upload volume: {mesh_id}")
+                continue
+            
+            #Link uploaded volume to mesh and set it to processed
+            for attempt in range(link_max_attempts):
+                if voxelise_api.link_mesh_volume(mesh_id, volume_id) and voxelise_api.set_mesh_processed(mesh_id):
+                    print(f"Successfully processed {mesh_id}")
+                    break
+                #Wait one second for each retry before retrying
+                sleep(1 * attempt)
+
+
+server() #RUN SERVER
