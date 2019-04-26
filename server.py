@@ -6,6 +6,7 @@ import os
 import sys
 import pathlib
 from time import sleep
+import hashlib
 
 # Our modules
 import voxelise
@@ -74,19 +75,40 @@ def validate_mesh(mesh):
     return True
 
 
-def get_volume_filename(mesh_filename):
+def get_file_md5(filename):
     """
-    Calculates the output volume filename from the mesh filename
+    Calculates the MD5 checksum of a file
 
     Args:
-        mesh_filename: Mesh file name
+        filename: File path
+
+    Returns:
+        MD5 checksum on success, False if failed to calculate
+    """
+    if not os.path.isfile(filename):
+        return False
+    try:
+        return hashlib.md5(open(filename, 'rb').read()).hexdigest()
+    except Exception as ex:
+        print(f"Unable to get file hash {filename}", file=sys.stderr)
+        print(ex, file=sys.stderr)
+        return False
+
+
+def get_volume_filename(mesh_file_path):
+    """
+    Calculates the output volume filename from the mesh file
+
+    Args:
+        mesh_file: Mesh file path
 
     Returns:
         Volume filename
     """
     # Work out the volume file name
-    ext_length = len(pathlib.Path(mesh_filename).suffix)
-    prefix = mesh_filename[:-ext_length]  # Remove extension
+    prefix = get_file_md5(mesh_file_path)
+    if not prefix:
+        return False
     return f'{prefix}_{VOXELISATION_DIMENSION}x{VOXELISATION_DIMENSION}x{VOXELISATION_DIMENSION}_uint8.raw'
 
 
@@ -104,11 +126,9 @@ def upload_volume_to_api(volume_file_path):
     for attempt in range(MAX_UPLOAD_ATTEMPTS):
         volume_id = voxelise_api.upload_volume(volume_file_path)
         if volume_id:
-            break
+            return volume_id
         # Wait RETRY_TIME for each retry before retrying
         sleep(RETRY_TIME * attempt)
-
-    return volume_id
 
 
 def link_volume_to_mesh(mesh_id, volume_id):
@@ -129,7 +149,6 @@ def link_volume_to_mesh(mesh_id, volume_id):
             return True
         # Wait RETRY_TIME for each retry before retrying
         sleep(RETRY_TIME * attempt)
-
     return False
 
 
@@ -143,6 +162,8 @@ def process_meshes(meshes):
     for mesh in meshes:
         mesh_id = mesh['_id']
 
+        print(f"Processing mesh {mesh_id}")
+
         if not mesh_id or not validate_mesh(mesh):
             print(f"Mesh failed validation: {mesh_id}")
             continue
@@ -150,17 +171,18 @@ def process_meshes(meshes):
         mesh_file = mesh['file']
         mesh_filename = mesh_file['name']
         mesh_file_url = mesh_file['url']
-
-        volume_filename = get_volume_filename(mesh_filename)
-
-        # Work out file paths
         mesh_file_path = f'{MESH_DIR}/{mesh_filename}'
-        volume_file_path = f'{VOLUME_DIR}/{volume_filename}'
 
         # Download file
         if not voxelise_api.download_file(mesh_file_url, mesh_file_path):
             print(f"Failed to download mesh file: {mesh_id}")
             continue
+
+        volume_filename = get_volume_filename(mesh_file_path)
+        if not volume_filename:
+            print(f"Failed to calculate volume filename: {mesh_id}")
+            continue
+        volume_file_path = f'{VOLUME_DIR}/{volume_filename}'
 
         # Voxelise
         if not voxelise.process_mesh(mesh_file_path, volume_file_path, VOXELISATION_DIMENSION):
