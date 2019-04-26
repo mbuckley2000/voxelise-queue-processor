@@ -1,8 +1,9 @@
-import sys, os, subprocess, pathlib
+import sys, os, subprocess, pathlib, multiprocessing
 
 #CONFIG
 validate_mesh_file_exts = ['.obj']
 validate_volume_file_exts = ['.raw']
+thread_count = multiprocessing.cpu_count() #Can be set manually
 
 def validate_args(mesh_filename, volume_filename, dimension):
     #Validate args
@@ -47,7 +48,7 @@ def process_mesh(mesh_filename, volume_filename, dimension):
         print("Mesh has already been voxelised")
         return True
 
-    command = f"./voxelise {mesh_filename} {volume_filename} {dimension}"
+    command = f"./voxelise {mesh_filename} {volume_filename} {dimension} {thread_count}"
     
     try:
         subprocess.run(command.split(' '))
