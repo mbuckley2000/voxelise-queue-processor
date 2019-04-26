@@ -17,7 +17,8 @@ VOLUME_DIR = 'downloads/processed'
 VOXELISATION_DIMENSION = 100 #OUTPUT VOLUME DIM (3D)
 MAX_UPLOAD_ATTEMPTS = 3
 MAX_LINKING_ATTEMPTS = 5 #Linking uploaded volume to mesh
-
+RETRY_TIME = 1
+SLEEP_INTERVAL = 1
 
 def check_and_create_directories(directories):
     """
@@ -79,10 +80,12 @@ def server():
     """
     while True:
         #Sleep a bit to avoid over pinging the server
-        sleep(1)
+        sleep(SLEEP_INTERVAL)
 
         #Verify directories
-        check_and_create_directories([MESH_DIR, VOLUME_DIR])
+        if not check_and_create_directories([MESH_DIR, VOLUME_DIR]):
+            print("Unable to check / create directories", file=sys.stderr)
+            continue
 
         #Get unprocessed meshes from API
         meshes = voxelise_api.get_meshes()
@@ -129,8 +132,8 @@ def server():
                 volume_id = voxelise_api.upload_volume(volume_file_path)
                 if volume_id:
                     break
-                #Wait one second for each retry before retrying
-                sleep(1 * attempt)
+                #Wait RETRY_TIME for each retry before retrying
+                sleep(RETRY_TIME * attempt)
             
             #Failed to upload even after retries
             if not volume_id:
@@ -142,8 +145,8 @@ def server():
                 if voxelise_api.link_mesh_volume(mesh_id, volume_id) and voxelise_api.set_mesh_processed(mesh_id):
                     print(f"Successfully processed {mesh_id}")
                     break
-                #Wait one second for each retry before retrying
-                sleep(1 * attempt)
+                #Wait RETRY_TIME for each retry before retrying
+                sleep(RETRY_TIME * attempt)
 
 
 server() #RUN SERVER
