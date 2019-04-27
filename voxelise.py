@@ -81,8 +81,12 @@ def process_mesh(mesh_filename, volume_filename, dimension):
     command = f"./voxelise {mesh_filename} {volume_filename} {dimension} {NUM_THREADS}"
 
     try:
-        subprocess.run(command.split(' '))
+        subprocess.check_output(command.split(' '))
         return True
+    except subprocess.CalledProcessError as voxelise_exception:
+        print(f"Voxeliser process failure\n{command}", file=sys.stderr)
+        print(voxelise_exception, file=sys.stderr)
+        return False
     except Exception as ex:
         print(f"Command failed:\n{command}", file=sys.stderr)
         print(ex, file=sys.stderr)
